@@ -80,12 +80,19 @@ def get_connection(db_path: Optional[Path | str] = None) -> sqlite3.Connection:
     return conn
 
 
+_INITIALIZED_PATHS: set[str] = set()
+
+
 def init_db(db_path: Optional[Path | str] = None) -> None:
     """Create the database and indexes if they do not already exist."""
+    resolved_path = str(Path(db_path) if db_path else DB_PATH)
+    if resolved_path in _INITIALIZED_PATHS and Path(resolved_path).exists():
+        return
     conn = get_connection(db_path)
     conn.executescript(SCHEMA)
     conn.commit()
     conn.close()
+    _INITIALIZED_PATHS.add(resolved_path)
 
 
 def next_id(conn: sqlite3.Connection, table: str, id_col: str, prefix: str, width: int = 3) -> str:

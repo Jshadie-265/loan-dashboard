@@ -3,7 +3,6 @@ import streamlit as st
 
 from db import delete_customer, get_connection, init_db, next_id
 
-st.set_page_config(page_title="Customers | Loan Manager", page_icon="👥", layout="wide")
 init_db()
 conn = get_connection()
 st.title("👥 Customers")

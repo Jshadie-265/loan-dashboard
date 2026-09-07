@@ -2,16 +2,14 @@ from datetime import date
 
 import streamlit as st
 
-from data_export import create_csv_backup
+from data_export import create_csv_backup, create_excel_export
 from db import get_connection, init_db
 
-
-st.set_page_config(page_title="Backup & export | Loan Manager", page_icon="🗃️", layout="wide")
 init_db()
 conn = get_connection()
 
 st.title("🗃️ Backup & export")
-st.caption("Download a portable copy of your current changes before major edits or at the end of each business day. You can also export directly from the Dashboard.")
+st.caption("Download a portable Excel copy of your records or an archival CSV backup. You can also export directly from the Dashboard.")
 
 counts = {
     "Customers": conn.execute("SELECT COUNT(*) FROM customers").fetchone()[0],
@@ -24,18 +22,49 @@ for column, (label, count) in zip(columns, counts.items()):
     column.metric(label, count)
 
 st.divider()
-st.subheader("Export current changes")
-st.write("First prepare the export, then press the download button. Visiting this page never starts a download.")
-if st.button("Prepare export", type="primary"):
-    st.session_state["prepared_backup"] = create_csv_backup(conn)
 
-if backup := st.session_state.get("prepared_backup"):
+st.subheader("📊 Consolidated Excel export (.xlsx)")
+st.write("Download all registers in a **single Excel workbook** with separate tabs for **Dashboard**, **Customers**, **Loans**, **Repayments**, and **Capital**.")
+
+
+def get_excel_bytes() -> bytes:
+    c = get_connection()
+    try:
+        return create_excel_export(c)
+    finally:
+        c.close()
+
+
+st.download_button(
+    "📥 Download consolidated Excel workbook (.xlsx)",
+    data=get_excel_bytes,
+    file_name=f"Loan_Manager_Export_{date.today().isoformat()}.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    type="primary",
+    key="backup_excel_download",
+)
+
+st.divider()
+
+with st.expander("🗜️ Archival CSV backup (.zip)"):
+    st.caption("Contains raw UTF-8 CSV files per register for database administration or migration.")
+
+    def get_csv_zip_bytes() -> bytes:
+        c = get_connection()
+        try:
+            return create_csv_backup(c)
+        finally:
+            c.close()
+
     st.download_button(
-        "Download prepared backup (.zip)",
-        data=backup,
+        "Download CSV archive (.zip)",
+        data=get_csv_zip_bytes,
         file_name=f"loan-manager-backup-{date.today().isoformat()}.zip",
         mime="application/zip",
+        key="backup_zip_download",
     )
 
-st.info("To move the complete app to another computer, install the repository there and keep this backup together with your original Loan.xlsx file.")
+st.info("💡 You can open the exported Excel workbook in Microsoft Excel or Google Sheets. Any edits made in the workbook can be re-imported seamlessly via the **Import data** page.")
 conn.close()
+
+

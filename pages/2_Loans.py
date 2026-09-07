@@ -6,7 +6,6 @@ import streamlit as st
 from business_logic import PERIOD_OPTIONS, calculate_due_date, compute_loan_terms, format_mwk, get_loans_df
 from db import delete_loan, get_connection, init_db, next_id
 
-st.set_page_config(page_title="Loans | Loan Manager", page_icon="📄", layout="wide")
 init_db()
 conn = get_connection()
 st.title("📄 Loans")

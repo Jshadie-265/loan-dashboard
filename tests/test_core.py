@@ -5,7 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from business_logic import calculate_due_date, compute_loan_terms, get_dashboard_metrics, get_loans_df
-from data_export import create_csv_backup
+from data_export import create_csv_backup, create_excel_export
 from db import delete_customer, delete_loan, get_connection, init_db
 from import_excel import import_loans, import_repayments
 
@@ -97,6 +97,93 @@ class LoanManagerTests(unittest.TestCase):
         repeated_loans, repeated_ids = import_loans(self.conn, loan_sheet)
         repeated_payments = import_repayments(self.conn, repayment_sheet, repeated_ids)
         self.assertEqual((repeated_loans, repeated_payments, repeated_ids["L001"]), (0, 0, "L002"))
+
+    def test_to_date_handles_various_formats(self):
+        from import_excel import to_date
+
+        self.assertEqual(to_date("10/08/2026"), "2026-08-10")
+        self.assertEqual(to_date("31/08/2026"), "2026-08-31")
+        self.assertEqual(to_date("2026-07-31"), "2026-07-31")
+        self.assertEqual(to_date("2026-08-01 00:00:00"), "2026-08-01")
+        self.assertEqual(to_date("01/09/2026"), "2026-09-01")
+        self.assertEqual(to_date("1-9-2026"), "2026-09-01")
+        self.assertEqual(to_date(date(2026, 8, 15)), "2026-08-15")
+        self.assertIsNone(to_date(""))
+        self.assertIsNone(to_date(None))
+        self.assertIsNone(to_date("invalid-date"))
+
+    def test_loan_consolidation_updates_existing_loan_without_duplicate(self):
+        # In setUp, L001 is for 'Test Borrower' with principal 1000
+        # When importing updated details for L001 with 'Test Borrower', it should UPDATE L001, not create L002
+        updated_sheet = FakeWorksheet({
+            (4, 1): "L001", (4, 2): "Test Borrower", (4, 3): "2026-01-01", (4, 4): "1 Month",
+            (4, 5): "2026-02-01", (4, 6): 1000, (4, 7): 0.25, (4, 8): 250, (4, 9): 1250,
+            (4, 13): "New Bank", (4, 14): "9999", (4, 15): "NEW-REF", (4, 16): "Updated notes",
+        })
+        loans_added, loan_ids = import_loans(self.conn, updated_sheet)
+        self.conn.commit()
+        self.assertEqual(loans_added, 0)
+        self.assertEqual(loan_ids["L001"], "L001")
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM loans").fetchone()[0], 1)
+        updated_row = self.conn.execute("SELECT * FROM loans WHERE loan_id='L001'").fetchone()
+        self.assertEqual(updated_row["bank"], "New Bank")
+        self.assertEqual(updated_row["notes"], "Updated notes")
+        self.assertEqual(float(updated_row["rate"]), 0.25)
+
+    def test_repayment_import_with_dd_mm_yyyy_dates(self):
+        repayment_sheet = FakeWorksheet({
+            (4, 1): "P001", (4, 2): "L001", (4, 4): "10/08/2026", (4, 5): 500,
+            (4, 6): "Bank Transfer", (4, 7): "REF-100", (4, 8): "Partial", (4, 9): "Agent X",
+        })
+        added = import_repayments(self.conn, repayment_sheet, {"L001": "L001"})
+        self.conn.commit()
+        self.assertEqual(added, 1)
+        pmt = self.conn.execute("SELECT * FROM repayments WHERE payment_id='P001'").fetchone()
+        self.assertIsNotNone(pmt)
+        self.assertEqual(pmt["payment_date"], "2026-08-10")
+        self.assertEqual(float(pmt["amount_paid"]), 500.0)
+
+    def test_single_excel_workbook_export_and_round_trip(self):
+        import io
+        import openpyxl
+        from data_export import create_excel_export
+        from import_excel import import_workbook
+
+        excel_bytes = create_excel_export(self.conn)
+        self.assertIsInstance(excel_bytes, bytes)
+        self.assertGreater(len(excel_bytes), 1000)
+
+        wb = openpyxl.load_workbook(io.BytesIO(excel_bytes), data_only=True)
+        self.assertEqual(
+            set(wb.sheetnames),
+            {"Dashboard", "Customers", "Loans", "Repayments", "Capital"},
+        )
+        self.assertGreater(wb["Dashboard"].max_row, 5)
+        self.assertGreater(wb["Customers"].max_row, 1)
+        self.assertGreater(wb["Loans"].max_row, 1)
+
+        # Verify round-trip re-import into the same DB succeeds with zero duplicate errors
+        results = import_workbook(io.BytesIO(excel_bytes), db_path=self.db_path)
+        self.assertEqual(results, {"customers": 0, "capital": 0, "loans": 0, "repayments": 0})
+
+    def test_ui_theme_styles_and_deferred_callables(self):
+        import ui_theme
+        self.assertIn("stAppDeployButton", ui_theme.COMMON_CSS)
+        self.assertIn('[data-testid="stTab"]', ui_theme.COMMON_CSS)
+        self.assertIn('aria-selected="true"', ui_theme.COMMON_CSS)
+        self.assertIn('aria-expanded="false"', ui_theme.COMMON_CSS)
+
+        # Verify deferred callable execution pattern
+        def deferred_excel():
+            return create_excel_export(self.conn)
+
+        def deferred_csv():
+            return create_csv_backup(self.conn)
+
+        self.assertTrue(callable(deferred_excel))
+        self.assertTrue(callable(deferred_csv))
+        self.assertGreater(len(deferred_excel()), 0)
+        self.assertGreater(len(deferred_csv()), 0)
 
 
 if __name__ == "__main__":

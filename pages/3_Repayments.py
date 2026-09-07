@@ -6,7 +6,6 @@ import streamlit as st
 from business_logic import format_mwk, get_loans_df, get_repayments_df
 from db import get_connection, init_db, next_id
 
-st.set_page_config(page_title="Repayments | Loan Manager", page_icon="💵", layout="wide")
 init_db()
 conn = get_connection()
 st.title("💵 Repayments")

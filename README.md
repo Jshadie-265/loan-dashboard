@@ -56,7 +56,7 @@ The app opens at `http://localhost:8501`. A blank `loan_app.db` is created autom
 
 After starting the app, choose **Import data** in the sidebar and upload one or more `Loan.xlsx` files. The importer consolidates them: repeat imports skip matching source records, while conflicting IDs in another workbook are assigned new local IDs so those records are retained.
 
-For daily use, the Dashboard also has **Import and consolidate Excel data** and **Export current changes** controls. An export is only downloaded after explicitly preparing it and pressing its download button. It contains the current customers, loans, repayments, and capital registers in a ZIP of CSV files.
+For daily use, the Dashboard also has **Import and consolidate Excel data** and **Export consolidated workbook** controls. You can download all registers in a single consolidated Excel workbook (.xlsx) containing separate tabs for Dashboard, Customers, Loans, Repayments, and Capital, or generate an archival CSV ZIP backup.
 
 You can also import from the command line:
 
@@ -70,7 +70,7 @@ python import_excel.py path/to/Loan.xlsx
 - **Loans:** issue loans with calendar-based weekly/monthly terms, fixed interest, live balance/status, filters, editing, and confirmed deletion.
 - **Repayments:** add, edit, and delete payments; overpayments are blocked.
 - **Capital:** add, edit, and delete money-in/money-out transactions with a running balance.
-- **Backup & export:** download all editable registers as a portable ZIP of CSV files.
+- **Backup & export:** download all registers in a single consolidated multi-tab Excel workbook (`.xlsx`), or download an archival CSV ZIP.
 - **Dashboard:** mirrors the workbook’s performance summary with real-time KPIs, status counts, charts, and overdue aging.
 
 ## Data safeguards
